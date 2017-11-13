@@ -284,7 +284,7 @@ tasks.withType(JavaCompile) {
 }
 artifacts {
     tasks.each{ task ->
-        if (task.name.startsWith("jar_com.alkacon.")){
+        if (task.name.startsWith("jar_org.opencms.")){
             def moduleName=task.baseName
             archives task
             archives tasks["javadocJar_$moduleName"]
@@ -298,21 +298,21 @@ install {
         mavenInstaller {
             artifacts.each{ arch ->
                 def filterName=arch.name
-                if (filterName.startsWith("com.alkacon")){
+                if (filterName.startsWith("org.opencms") && filterName.endsWith(".jar")){
                     filterName=filterName.substring(0, filterName.lastIndexOf(".jar"))
                     addFilter(filterName){artifact, file ->
                         artifact.name.startsWith(filterName)
                     }
                     pom(filterName).project {
-                        name 'Alkacon OAMP'
-                        description 'Alkacon OAMP'
+                        name "The OpenCms Apollo Template - $filterName"
+                        description "The OpenCms Apollo Template - $filterName"
                         packaging 'jar'
-                        groupId 'com.alkacon'
+                        groupId 'org.opencms'
                         url 'http://www.alkacon.com'
                         scm {
-                            url 'scm:git@github.com:alkacon/alkacon-oamp.git'
-                            connection 'scm:git@github.com:alkacon/alkacon-oamp.git'
-                            developerConnection 'scm:git@github.com:alkacon/alkacon-oamp.git'
+                            url 'scm:git@github.com:alkacon/apollo-template.git'
+                            connection 'scm:git@github.com:alkacon/apollo-template.git'
+                            developerConnection 'scm:git@github.com:alkacon/apollo-template.git'
                         }
                         licenses {
                             license {
@@ -335,5 +335,22 @@ install {
                 }
             }
         }
+    }
+}
+
+// Configure versioning for jar artifacts
+tasks.findAll { task -> task.name.startsWith('jar_org.opencms.') }.each { jarTask ->
+    String filterName = jarTask.baseName
+
+    install.repositories.mavenInstaller.pom(filterName)*.project {
+        version = jarTask.moduleVersion
+    }
+}
+
+tasks.withType(Javadoc) {
+    options.addStringOption("sourcepath", "")
+    if (JavaVersion.current().isJava8Compatible()) {
+    	options.addStringOption("Xdoclint:none", "-quiet")
+    	options.addBooleanOption("-allow-script-in-comments",true);
     }
 }
