@@ -17,6 +17,11 @@ props.load(new FileInputStream("$projectDir/all-modules.properties"))
 project.ext.allModuleNames = props['modules.common.all']
 project.ext.modulesDistsDir = file("${project.buildDir}/modulesZip")
 
+// Jenkins sets BUILD_NUMBER incrementally. It can be overridden in the command line
+//  (E.g.: ./gradlew -Pbuild_number=127 info). If not provided, it gets a default 'manual'
+String buildNumber = project.hasProperty('build_number') ? build_number
+        : (System.env["BUILD_NUMBER"] ?: 'manual')
+
 repositories {
     mavenLocal()
     if (project.hasProperty('additional_repositories')){
@@ -338,12 +343,78 @@ install {
     }
 }
 
+// Configure zip artifacts for publishing
+if (project.hasProperty('publish_repository')) {
+    // Add all distributables modules
+    artifacts {
+        tasks.findAll { task -> task.name.startsWith('dist_') }.each { distTask ->
+            archives distTask
+        }
+    }
+
+    uploadArchives {
+        repositories {
+            mavenDeployer {
+                repository(url: publish_repository) {
+                    authentication(userName: publish_user, password: publish_password)
+                }
+                tasks.findAll { task -> task.name.startsWith('dist_') }.each { distTask ->
+                    // E.g. distTask ":dist_org.opencms.apollo.template.core"
+                    //    distTask.baseName = "org.opencms.apollo.template.core"
+                    String filterName = distTask.baseName
+                    addFilter(filterName) { artifact, file ->
+                        // E.g. artifact:
+                        //    artifact.name = "org.opencms.apollo.template.core"
+                        //    artifact.ext = "zip"
+                        //    artifact.type = "zip"
+                        artifact.name == filterName
+                    }
+                    pom(filterName).project {
+                        name "The OpenCms Apollo Template - $filterName"
+                        version = "${distTask.version}.${buildNumber}"
+                        description "The OpenCms Apollo Template - $filterName"
+                        packaging 'zip'
+                        groupId 'org.opencms'
+                        url 'http://www.alkacon.com'
+                        scm {
+                            url 'scm:git@github.com:alkacon/apollo-template.git'
+                            connection 'scm:git@github.com:alkacon/apollo-template.git'
+                            developerConnection 'scm:git@github.com:alkacon/apollo-template.git'
+                        }
+                        licenses {
+                            license {
+                                name 'GNU General Public License'
+                                url 'http://www.gnu.org/licenses/gpl.html'
+                                distribution 'repo'
+                            }
+                        }
+                        organization {
+                            name 'Alkacon Software'
+                            url 'http://www.alkacon.com'
+                        }
+                        developers {
+                            developer {
+                                name 'Alkacon Software'
+                                url 'http://www.alkacon.com'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Configure versioning for jar artifacts
 tasks.findAll { task -> task.name.startsWith('jar_org.opencms.') }.each { jarTask ->
     String filterName = jarTask.baseName
+    def uploaders = [install.repositories.mavenInstaller]
+    if (project.hasProperty('publish_repository')) {
+        uploaders << uploadArchives.repositories.mavenDeployer
+    }
 
-    install.repositories.mavenInstaller.pom(filterName)*.project {
-        version = jarTask.moduleVersion
+    uploaders*.pom(filterName)*.project {
+        version = "${jarTask.moduleVersion}.${buildNumber}"
     }
 }
 
